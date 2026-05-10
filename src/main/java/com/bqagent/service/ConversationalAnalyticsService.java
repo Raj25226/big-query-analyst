@@ -224,7 +224,7 @@ public class ConversationalAnalyticsService {
         List<String> thoughts       = new ArrayList<>();
         List<String> followUps      = new ArrayList<>();
         StringBuilder answer        = new StringBuilder();
-        String        sqlUsed       = null;
+        String[]      sqlHolder     = new String[1];
         String        convId        = conversationId;
 
         // Try parsing as a JSON array first (actual API format)
@@ -233,14 +233,14 @@ public class ConversationalAnalyticsService {
 
             if (root.isArray()) {
                 for (JsonNode node : root) {
-                    processNode(node, thoughts, followUps, answer, convId);
+                    processNode(node, thoughts, followUps, answer, convId, sqlHolder);
 
                     // Extract SQL from agentMessage (if present)
                     JsonNode agentMsg = node.path("agentMessage");
                     if (!agentMsg.isMissingNode()) {
                         JsonNode queryNode = agentMsg.path("query");
                         if (!queryNode.isMissingNode() && queryNode.has("sql")) {
-                            sqlUsed = queryNode.path("sql").asText();
+                            sqlHolder[0] = queryNode.path("sql").asText();
                         }
                         // Legacy: agentMessage.text as plain string
                         if (agentMsg.has("text") && agentMsg.get("text").isTextual()) {
@@ -260,7 +260,7 @@ public class ConversationalAnalyticsService {
                 }
             } else {
                 // Single object — process it directly
-                processNode(root, thoughts, followUps, answer, convId);
+                processNode(root, thoughts, followUps, answer, convId, sqlHolder);
             }
 
         } catch (Exception e) {
@@ -273,7 +273,7 @@ public class ConversationalAnalyticsService {
                 if (line.endsWith(",")) line = line.substring(0, line.length() - 1);
                 try {
                     JsonNode node = objectMapper.readTree(line);
-                    processNode(node, thoughts, followUps, answer, convId);
+                    processNode(node, thoughts, followUps, answer, convId, sqlHolder);
                 } catch (Exception ex) {
                     log.debug("Skipping unparseable line: {}", line);
                 }
@@ -282,7 +282,7 @@ public class ConversationalAnalyticsService {
 
         return AskResponse.builder()
                 .answer(answer.toString().isBlank() ? "No answer returned from agent." : answer.toString())
-                .sqlUsed(sqlUsed)
+                .sqlUsed(sqlHolder[0])
                 .conversationId(convId)
                 .agentId(agentId)
                 .thoughts(includeThoughts ? thoughts : null)
@@ -293,41 +293,88 @@ public class ConversationalAnalyticsService {
      * Process a single response node, extracting text from the actual CA API format:
      *   systemMessage.text.parts  → array of strings
      *   systemMessage.text.textType → "THOUGHT", "PROGRESS", "FINAL_RESPONSE", "FOLLOWUP_QUESTIONS"
+     *   systemMessage.data.result → table data
+     *   systemMessage.data.generatedSql → actual SQL
      */
     private void processNode(JsonNode node, List<String> thoughts, List<String> followUps,
-                             StringBuilder answer, String convId) {
+                             StringBuilder answer, String convId, String[] sqlHolder) {
         JsonNode sysMsg = node.path("systemMessage");
         if (sysMsg.isMissingNode()) return;
 
+        // 1. Text processing
         JsonNode textObj = sysMsg.path("text");
-        if (textObj.isMissingNode()) return;
+        if (!textObj.isMissingNode()) {
+            if (textObj.isObject()) {
+                String textType = textObj.path("textType").asText("");
+                JsonNode partsNode = textObj.path("parts");
 
-        // New format: text is an object with "parts" and "textType"
-        if (textObj.isObject()) {
-            String textType = textObj.path("textType").asText("");
-            JsonNode partsNode = textObj.path("parts");
+                if (partsNode.isArray()) {
+                    for (JsonNode part : partsNode) {
+                        String partText = part.asText("").trim();
+                        if (partText.isBlank()) continue;
 
-            if (partsNode.isArray()) {
-                for (JsonNode part : partsNode) {
-                    String partText = part.asText("").trim();
-                    if (partText.isBlank()) continue;
-
-                    switch (textType) {
-                        case "FINAL_RESPONSE" -> {
-                            if (!answer.isEmpty()) answer.append("\n");
-                            answer.append(partText);
+                        switch (textType) {
+                            case "FINAL_RESPONSE" -> {
+                                if (!answer.isEmpty()) answer.append("\n");
+                                answer.append(partText);
+                            }
+                            case "THOUGHT", "PROGRESS" -> thoughts.add(partText);
+                            case "FOLLOWUP_QUESTIONS" -> followUps.add(partText);
+                            default -> log.debug("Unknown textType [{}]: {}", textType, partText);
                         }
-                        case "THOUGHT", "PROGRESS" -> thoughts.add(partText);
-                        case "FOLLOWUP_QUESTIONS" -> followUps.add(partText);
-                        default -> log.debug("Unknown textType [{}]: {}", textType, partText);
                     }
                 }
+            } else if (textObj.isTextual()) {
+                // Legacy format: text is a plain string
+                String text = textObj.asText("").trim();
+                if (!text.isBlank()) {
+                    thoughts.add(text);
+                }
             }
-        } else if (textObj.isTextual()) {
-            // Legacy format: text is a plain string
-            String text = textObj.asText("").trim();
-            if (!text.isBlank()) {
-                thoughts.add(text);
+        }
+
+        // 2. Data Processing (SQL and Table Results)
+        JsonNode dataObj = sysMsg.path("data");
+        if (!dataObj.isMissingNode()) {
+            // Check for generated SQL
+            if (dataObj.has("generatedSql")) {
+                sqlHolder[0] = dataObj.get("generatedSql").asText();
+            }
+
+            // Check for table results to append as a Markdown table
+            JsonNode result = dataObj.path("result");
+            if (!result.isMissingNode() && result.has("schema") && result.has("data")) {
+                JsonNode fields = result.path("schema").path("fields");
+                JsonNode rows = result.path("data");
+
+                if (fields.isArray() && rows.isArray() && !rows.isEmpty()) {
+                    StringBuilder tableMd = new StringBuilder("\n\n");
+
+                    // Headers
+                    List<String> colNames = new ArrayList<>();
+                    for (JsonNode field : fields) {
+                        colNames.add(field.path("name").asText("Unknown"));
+                    }
+                    tableMd.append("| ").append(String.join(" | ", colNames)).append(" |\n");
+
+                    // Separator
+                    tableMd.append("|");
+                    for (int i = 0; i < colNames.size(); i++) tableMd.append("---|");
+                    tableMd.append("\n");
+
+                    // Rows
+                    for (JsonNode row : rows) {
+                        tableMd.append("|");
+                        for (String colName : colNames) {
+                            String val = row.path(colName).asText("");
+                            tableMd.append(" ").append(val).append(" |");
+                        }
+                        tableMd.append("\n");
+                    }
+                    tableMd.append("\n");
+
+                    answer.append(tableMd);
+                }
             }
         }
     }
