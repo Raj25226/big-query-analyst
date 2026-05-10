@@ -14,7 +14,7 @@
     </parent>
 
     <groupId>com.bqagent</groupId>
-    <artifactId>bq-agent-looker</artifactId>
+    <artifactId>big-query-analyst</artifactId>
     <version>1.0.0</version>
     <name>BigQuery AI Agent — Conversational Analytics API</name>
 

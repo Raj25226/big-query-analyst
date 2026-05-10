@@ -1,4 +1,4 @@
-# BigQuery AI Agent — Google Conversational Analytics API (Java)
+# big-query-analyst — Google Conversational Analytics API (Java)
 
 Natural language questions → Gemini → BigQuery → Answers.  
 Built with **Spring Boot 3** using Google’s **Conversational Analytics API** (`geminidataanalytics.googleapis.com`).
@@ -164,11 +164,11 @@ Creates a persistent, reusable data agent in GCP.
 ## Deploy to Cloud Run
 
 ```bash
-docker build -t gcr.io/YOUR_PROJECT/bq-agent-looker .
-docker push gcr.io/YOUR_PROJECT/bq-agent-looker
+docker build -t gcr.io/YOUR_PROJECT/big-query-analyst .
+docker push gcr.io/YOUR_PROJECT/big-query-analyst
 
-gcloud run deploy bq-agent-looker \
-  --image gcr.io/YOUR_PROJECT/bq-agent-looker \
+gcloud run deploy big-query-analyst \
+  --image gcr.io/YOUR_PROJECT/big-query-analyst \
   --set-env-vars GCP_PROJECT_ID=your-project \
   --service-account your-sa@your-project.iam.gserviceaccount.com \
   --region us-central1 \
