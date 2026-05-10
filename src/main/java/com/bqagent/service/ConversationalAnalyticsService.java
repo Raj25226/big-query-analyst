@@ -131,12 +131,47 @@ public class ConversationalAnalyticsService {
                 .bodyToMono(JsonNode.class);
     }
 
+    // ── Create a Conversation ─────────────────────────────────────────────────
+
+    public Mono<JsonNode> createConversation(String requestProject) {
+        String projectId = resolveProject(requestProject);
+        String url = String.format("%s/projects/%s/locations/%s/conversations",
+                CA_BASE, projectId, LOCATION);
+
+        // The API requires either an 'agents' list or a non-empty 'context' object to be set.
+        ObjectNode payload = objectMapper.createObjectNode();
+        ObjectNode context = objectMapper.createObjectNode();
+        context.put("system_instruction", DEFAULT_SYSTEM_INSTRUCTION);
+        payload.set("context", context);
+
+        log.info("Creating a new conversation in project [{}]", projectId);
+
+        return webClient.post()
+                .uri(url)
+                .header("Authorization", bearerToken())
+                .header("Content-Type", "application/json")
+                .header("x-goog-user-project", projectId)
+                .bodyValue(payload)
+                .retrieve()
+                .onStatus(HttpStatusCode::isError, resp ->
+                        resp.bodyToMono(String.class)
+                                .flatMap(body -> Mono.error(new RuntimeException(
+                                        "Create conversation failed [" + resp.statusCode() + "]: " + body))))
+                .bodyToMono(JsonNode.class);
+    }
+
     // ── Chat (main ask method) ────────────────────────────────────────────────
 
     public Mono<AskResponse> ask(AskRequest req, boolean includeThoughts) {
         String projectId = resolveProject(req.getProjectId());
-        String chatUrl   = String.format("%s/projects/%s/locations/%s:chat",
-                CA_BASE, projectId, LOCATION);
+        String chatUrl;
+        if (req.getConversationId() != null && !req.getConversationId().isBlank()) {
+            chatUrl = String.format("%s/projects/%s/locations/%s/conversations/%s:chat",
+                    CA_BASE, projectId, LOCATION, req.getConversationId());
+        } else {
+            chatUrl = String.format("%s/projects/%s/locations/%s:chat",
+                    CA_BASE, projectId, LOCATION);
+        }
 
         // Build the chat payload
         ObjectNode payload  = objectMapper.createObjectNode();
@@ -158,12 +193,6 @@ public class ConversationalAnalyticsService {
             ObjectNode ctx = objectMapper.createObjectNode();
             ctx.put("data_agent", String.format(
                     "projects/%s/locations/%s/dataAgents/%s", projectId, LOCATION, req.getAgentId()));
-
-            if (req.getConversationId() != null && !req.getConversationId().isBlank()) {
-                ctx.put("conversation", String.format(
-                        "projects/%s/locations/%s/conversations/%s",
-                        projectId, LOCATION, req.getConversationId()));
-            }
 
             payload.set("data_agent_context", ctx);
             log.info("Chatting with agent [{}] | project [{}] | question: {}",
@@ -383,8 +412,14 @@ public class ConversationalAnalyticsService {
 
     public Mono<String> askRaw(AskRequest req) {
         String projectId = resolveProject(req.getProjectId());
-        String chatUrl   = String.format("%s/projects/%s/locations/%s:chat",
-                CA_BASE, projectId, LOCATION);
+        String chatUrl;
+        if (req.getConversationId() != null && !req.getConversationId().isBlank()) {
+            chatUrl = String.format("%s/projects/%s/locations/%s/conversations/%s:chat",
+                    CA_BASE, projectId, LOCATION, req.getConversationId());
+        } else {
+            chatUrl = String.format("%s/projects/%s/locations/%s:chat",
+                    CA_BASE, projectId, LOCATION);
+        }
 
         ObjectNode payload = objectMapper.createObjectNode();
         payload.put("parent", String.format("projects/%s/locations/%s", projectId, LOCATION));

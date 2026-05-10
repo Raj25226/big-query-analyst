@@ -51,7 +51,7 @@ public class AgentController {
             @Valid @RequestBody AskRequest req,
             @RequestParam(defaultValue = "false") boolean debug) {
 
-        log.info("POST /ask — question: {}", req.getQuestion());
+        log.info("POST /ask — question: {} | conversationId: {}", req.getQuestion(), req.getConversationId());
         return caService.ask(req, debug)
                 .map(ResponseEntity::ok)
                 .onErrorResume(e -> {
@@ -69,7 +69,7 @@ public class AgentController {
 
     @PostMapping("/ask/raw")
     public Mono<ResponseEntity<String>> askRaw(@Valid @RequestBody AskRequest req) {
-        log.info("POST /ask/raw — question: {}", req.getQuestion());
+        log.info("POST /ask/raw — question: {} | conversationId: {}", req.getQuestion(), req.getConversationId());
         return caService.askRaw(req)
                 .map(raw -> ResponseEntity.ok()
                         .header("Content-Type", "application/x-ndjson")
@@ -93,6 +93,24 @@ public class AgentController {
                 .map(ResponseEntity::ok)
                 .onErrorResume(e -> {
                     log.error("Error in /agents/create: {}", e.getMessage());
+                    return Mono.just(ResponseEntity.internalServerError().build());
+                });
+    }
+
+    // ── POST /conversations/create — create a new conversation ────────────────
+    //
+    // Creates a new empty conversation resource in GCP.
+    // Use the returned "name" field as the conversation_id in your /ask requests.
+
+    @PostMapping("/conversations/create")
+    public Mono<ResponseEntity<JsonNode>> createConversation(
+            @RequestParam(required = false) String projectId) {
+
+        log.info("POST /conversations/create");
+        return caService.createConversation(projectId)
+                .map(ResponseEntity::ok)
+                .onErrorResume(e -> {
+                    log.error("Error in /conversations/create: {}", e.getMessage());
                     return Mono.just(ResponseEntity.internalServerError().build());
                 });
     }
