@@ -10,9 +10,12 @@ This document outlines the architectural constraints and limitations regarding t
 * **Constraint**: The Model Context Protocol (MCP) requires an "MCP Client" (an AI Agent acting as the brain) to connect to an "MCP Server" (the tool/data source, such as a BigQuery MCP server).
 * **Limitation**: Because Looker's Gemini cannot be used as a raw LLM API, you cannot use it as the "brain" for a custom MCP client (e.g., inside a Spring Boot application). Connecting a custom Spring Boot MCP client to the BigQuery MCP Server would require purchasing a separate Vertex AI API subscription.
 
-## 3. A2A Protocol Does Not Solve the API Constraint
-* **Constraint**: The Agent-to-Agent (A2A) protocol is designed for horizontal collaboration (agents delegating tasks to other agents), whereas MCP is for vertical integration (agents talking to tools). 
-* **Limitation**: Implementing A2A in a Spring Boot application does not bypass the need for an underlying LLM. Looker does not currently offer an A2A endpoint that exposes its Gemini agent to external applications.
+## 3. Why the A2A Protocol Doesn't Work Here
+It is common to confuse the **A2A (Agent-to-Agent)** protocol with the **MCP (Model Context Protocol)**. Here is exactly why you cannot use A2A between your Spring Boot app and the BigQuery MCP server:
+
+* **Mismatched Roles (Agent vs. Tool)**: The A2A protocol is strictly for two "smart" Agents (both equipped with their own LLM brains) to collaborate. The BigQuery MCP server is **not an Agent**; it is a "dumb" tool that just exposes database schemas and executes SQL. You cannot use an Agent-to-Agent protocol to talk to a tool. Tools require the MCP protocol.
+* **The Missing "Brain" Problem**: If you want your Spring Boot application to connect directly to the BigQuery MCP server (using the correct MCP protocol), your Spring Boot application must act as the "Client/Agent". To do this, Spring Boot requires its own LLM "brain" to understand the user's question and decide what SQL to write. That means you would have to buy a separate Vertex AI or OpenAI API key, violating your requirement for no extra costs.
+* **Looker's Agent is Walled Off**: You might wonder, "Can I use A2A to have Spring Boot talk to Looker's Gemini Agent, and have Looker talk to BigQuery?" No. Looker's built-in Gemini does not support or expose an A2A endpoint. It can only be accessed via Looker's proprietary REST API (the Conversational Analytics API).
 
 ## Summary & Recommended Architecture
 If the strict requirement is to **avoid paying for any additional Gemini API subscriptions** and rely solely on the Enterprise Looker entitlement:

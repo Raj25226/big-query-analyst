@@ -3,28 +3,22 @@ package com.bqagent.model;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
-import java.util.List;
 
 @Data
 public class CreateAgentRequest {
 
-    @NotBlank(message = "agentId must not be blank")
-    @JsonProperty("agent_id")
-    private String agentId;
+    @NotBlank(message = "agent name must not be blank")
+    @JsonProperty("name")
+    private String name;
 
-    @NotBlank(message = "datasetId must not be blank")
-    @JsonProperty("dataset_id")
-    private String datasetId;
+    @JsonProperty("description")
+    private String description;
 
-    // Optional: specific tables — blank means expose whole dataset
-    @JsonProperty("table_ids")
-    private List<String> tableIds;
+    @NotBlank(message = "lookerModel must not be blank")
+    @JsonProperty("looker_model")
+    private String lookerModel;
 
-    // Optional: override the GCP project
-    @JsonProperty("project_id")
-    private String projectId;
-
-    // Optional: custom system instructions for this agent
-    @JsonProperty("system_instructions")
-    private String systemInstructions;
+    @NotBlank(message = "lookerExplore must not be blank")
+    @JsonProperty("looker_explore")
+    private String lookerExplore;
 }

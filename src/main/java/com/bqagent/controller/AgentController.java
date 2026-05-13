@@ -20,8 +20,8 @@ public class AgentController {
 
     private final ConversationalAnalyticsService caService;
 
-    @Value("${gcp.project.id}")
-    private String defaultProjectId;
+    @Value("${looker.base.url}")
+    private String lookerBaseUrl;
 
     public AgentController(ConversationalAnalyticsService caService) {
         this.caService = caService;
@@ -33,8 +33,8 @@ public class AgentController {
     public ResponseEntity<Map<String, String>> health() {
         return ResponseEntity.ok(Map.of(
                 "status",  "ok",
-                "api",     "geminidataanalytics.googleapis.com",
-                "project", defaultProjectId
+                "api",     "Looker Conversational Analytics API (v4.0)",
+                "lookerUrl", lookerBaseUrl
         ));
     }
 
@@ -88,7 +88,7 @@ public class AgentController {
     public Mono<ResponseEntity<JsonNode>> createAgent(
             @Valid @RequestBody CreateAgentRequest req) {
 
-        log.info("POST /agents/create — agentId: {}", req.getAgentId());
+        log.info("POST /agents/create — agentName: {}", req.getName());
         return caService.createAgent(req)
                 .map(ResponseEntity::ok)
                 .onErrorResume(e -> {

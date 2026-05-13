@@ -3,7 +3,6 @@ package com.bqagent.model;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
-import java.util.List;
 
 @Data
 public class AskRequest {
@@ -19,13 +18,10 @@ public class AskRequest {
     @JsonProperty("conversation_id")
     private String conversationId;
 
-    // Used when no agentId — inline BigQuery context
-    @JsonProperty("project_id")
-    private String projectId;
+    // Used when no agentId — inline context via Looker Models
+    @JsonProperty("looker_model")
+    private String lookerModel;
 
-    @JsonProperty("dataset_id")
-    private String datasetId;
-
-    @JsonProperty("table_ids")
-    private List<String> tableIds;
+    @JsonProperty("looker_explore")
+    private String lookerExplore;
 }
