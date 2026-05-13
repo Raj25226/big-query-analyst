@@ -10,7 +10,7 @@ Built with **Spring Boot 3** using Google’s **Conversational Analytics API** (
 ```
 Your API call  (POST /ask)
       ↓
-Spring Boot Agent  (port 8000)
+Spring Boot App  (port 8000)
       ↓
 Conversational Analytics API  (geminidataanalytics.googleapis.com)
       ↓
